@@ -99,6 +99,9 @@ export const AvatarViewport = forwardRef<AvatarViewportHandle, AvatarViewportPro
   const loadedModelUrlRef = useRef<string | null>(null);
   const characterRef = useRef(character);
 
+  const isSpeakingRef = useRef(isSpeaking);
+  const speakingWeightRef = useRef(0);
+
   useEffect(() => {
     characterRef.current = character;
     autoRotateRef.current = autoRotate;
@@ -108,7 +111,8 @@ export const AvatarViewport = forwardRef<AvatarViewportHandle, AvatarViewportPro
     transitionSpeedRef.current = transitionSpeed;
     onLoadedRef.current = onLoaded;
     onErrorRef.current = onError;
-  }, [character, autoRotate, blinking, breathing, headTracking, transitionSpeed, onLoaded, onError]);
+    isSpeakingRef.current = isSpeaking;
+  }, [character, autoRotate, blinking, breathing, headTracking, transitionSpeed, isSpeaking, onLoaded, onError]);
 
   // Expressions Ref for render loop access without re-init
   const expressionsRef = useRef<FacialExpression>(expressions);
@@ -317,17 +321,35 @@ export const AvatarViewport = forwardRef<AvatarViewportHandle, AvatarViewportPro
           eyeBlinkRight: Math.max(expressionsRef.current.eyeBlinkRight, eyeBlink),
         };
 
-        // Smoothly interpolate bones towards figure pose
+        // Dynamic speaking weight interpolation (gentle, smooth fade)
+        const targetWeight = isSpeakingRef.current ? 1.0 : 0.0;
+        speakingWeightRef.current = THREE.MathUtils.lerp(
+          speakingWeightRef.current,
+          targetWeight,
+          Math.min(1.0, delta * 3.0)
+        );
+
+        const curExpr = expressionsRef.current;
+        const isPaused = curExpr.isSpeechPaused ?? (curExpr.viseme_sil === 1 && (curExpr.mouthOpen ?? 0) <= 0.03);
+        const speechVolume = curExpr.speechVolume ?? (curExpr.mouthOpen && curExpr.mouthOpen > 0.05 ? curExpr.mouthOpen : 0.5);
+
+        // Smoothly interpolate bones towards figure pose with conversational speaking motion
         updateRigPose(
           rigRef.current,
           transitionSpeedRef.current,
           breathingRef.current,
           time,
-          headTrackingRef.current ? mouseOffset.current : undefined
+          headTrackingRef.current ? mouseOffset.current : undefined,
+          {
+            isSpeaking: isSpeakingRef.current,
+            speakingWeight: speakingWeightRef.current,
+            audioVolume: speechVolume,
+            isPaused,
+          }
         );
 
-        // Apply facial expressions & visemes to 3D meshes
-        applyMorphTargets(rigRef.current, activeExpressions);
+        // Apply facial expressions & visemes to 3D meshes with real-time sound pause synchronization
+        applyMorphTargets(rigRef.current, activeExpressions, time);
       }
 
       renderer.render(scene, camera);
@@ -622,11 +644,19 @@ export const AvatarViewport = forwardRef<AvatarViewportHandle, AvatarViewportPro
         </div>
       </div>
 
-      {/* Speaking Indicator */}
+      {/* Speaking & Live Pause Indicator */}
       {isSpeaking && (
-        <div className="absolute top-4 right-4 z-10 flex items-center gap-2 bg-rose-500/90 text-white px-3 py-1.5 rounded-xl text-xs font-medium shadow-lg animate-pulse">
-          <Volume2 className="w-4 h-4 animate-bounce" />
-          <span>در حال صحبت و لب‌خوانی زنده...</span>
+        <div className={`absolute top-4 right-4 z-10 flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium shadow-lg transition-all ${
+          expressions.isSpeechPaused
+            ? 'bg-amber-500/90 text-slate-950 shadow-amber-500/20'
+            : 'bg-emerald-500/95 text-white shadow-emerald-500/20 animate-pulse'
+        }`}>
+          <Volume2 className={`w-4 h-4 ${expressions.isSpeechPaused ? '' : 'animate-bounce'}`} />
+          <span>
+            {expressions.isSpeechPaused
+              ? 'مکث صدا (هماهنگ با استراحت لب و حالت صحبت)'
+              : 'در حال گفتار و حرکات ریتمیک زنده'}
+          </span>
         </div>
       )}
 

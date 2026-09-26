@@ -232,10 +232,16 @@ export function NadiaAIChat({
             viseme_FF: 0,
             mouthOpen: 0,
             jawOpen: 0,
+            speechVolume: 0,
+            isSpeechPaused: true,
           });
         },
-        onVisemeUpdate: (morphs) => {
-          onUpdateVisemes(morphs as Partial<FacialExpression>);
+        onVisemeUpdate: (morphs, activeViseme, char, word, metrics) => {
+          onUpdateVisemes({
+            ...(morphs as Partial<FacialExpression>),
+            speechVolume: metrics?.volume ?? 0,
+            isSpeechPaused: metrics?.isSilent ?? (activeViseme === 'sil'),
+          });
         },
       }
     );

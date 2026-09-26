@@ -149,14 +149,29 @@ export function applyPoseToRig(
   }
 }
 
-// Interpolate rig bones towards target transforms
+export interface SpeakingRigOptions {
+  isSpeaking: boolean;
+  speakingWeight?: number; // 0.0 to 1.0 (smooth blend)
+  audioVolume?: number; // 0.0 to 1.0 live acoustic volume
+  isPaused?: boolean; // true during sound pauses/silences
+}
+
+// Interpolate rig bones towards target transforms with natural breathing and conversational speaking gestures
 export function updateRigPose(
   rig: RiggedAvatar,
   factor: number,
   breathing: boolean = true,
   time: number = 0,
-  headOffset?: { x: number; y: number }
+  headOffset?: { x: number; y: number },
+  speaking?: SpeakingRigOptions
 ) {
+  const speakingWeight = speaking?.speakingWeight ?? (speaking?.isSpeaking ? 1.0 : 0.0);
+  const isPaused = speaking?.isPaused ?? false;
+  const audioVol = speaking?.audioVolume ?? 0.5;
+
+  // Active energy: when sound is paused, settle to a gentle conversational hold; when sound is active, scale with volume
+  const activeEnergy = speakingWeight * (isPaused ? 0.12 : Math.min(1.2, 0.45 + audioVol * 0.65));
+
   for (const [boneName, bone] of rig.bones.entries()) {
     const targetQ = rig.targetQuaternions.get(boneName);
     const currQ = rig.currentQuaternions.get(boneName);
@@ -165,7 +180,7 @@ export function updateRigPose(
       currQ.slerp(targetQ, factor);
       bone.quaternion.copy(currQ);
 
-      // Add natural breathing oscillation to Spine / Spine1
+      // 1. Natural breathing oscillation to Spine / Spine1
       if (breathing) {
         if (boneName === 'Spine' || boneName === 'Spine1') {
           const breathAngle = Math.sin(time * 2.2) * 0.02;
@@ -173,10 +188,24 @@ export function updateRigPose(
         }
       }
 
-      // Head look-at offset
+      // 2. Head look-at offset (pointer tracking)
       if (headOffset && boneName === 'Head') {
         bone.rotateY(headOffset.x * 0.35);
         bone.rotateX(-headOffset.y * 0.25);
+      }
+
+      // 3. Gentle, slow, and dignified conversational head nod (zero body jitter or twitching)
+      if (boneName === 'Head' && speakingWeight > 0.01) {
+        // Slow natural head nod (frequency ~0.25 Hz, amplitude only ~1.1 degrees)
+        const smoothNod = Math.sin(time * 1.6) * 0.02 * speakingWeight;
+        // Subtle communicative head tilt (amplitude ~0.7 degrees)
+        const smoothTilt = Math.sin(time * 0.8) * 0.012 * speakingWeight;
+        // Subtle natural glance (amplitude ~0.8 degrees)
+        const smoothYaw = Math.cos(time * 0.6) * 0.014 * speakingWeight;
+
+        bone.rotateX(smoothNod);
+        bone.rotateY(smoothYaw);
+        bone.rotateZ(smoothTilt);
       }
     }
 
@@ -194,37 +223,53 @@ export function updateRigPose(
   }
 }
 
-// Apply facial expressions & morph targets cleanly without double-compounding
+// Apply facial expressions & morph targets cleanly without double-compounding,
+// with strict pause gating and dynamic eyebrow speech response
 export function applyMorphTargets(
   rig: RiggedAvatar,
-  expressions: FacialExpression
+  expressions: FacialExpression,
+  time: number = 0
 ) {
   if (rig.meshesWithMorphs.length === 0) return;
 
-  const aa = Math.min(1, Math.max(0, expressions.viseme_aa ?? 0));
-  const pp = Math.min(1, Math.max(0, expressions.viseme_PP ?? 0));
-  const u = Math.min(1, Math.max(0, expressions.viseme_U ?? 0));
-  const o = Math.min(1, Math.max(0, expressions.viseme_O ?? 0));
-  const e = Math.min(1, Math.max(0, expressions.viseme_E ?? 0));
-  const i = Math.min(1, Math.max(0, expressions.viseme_I ?? 0));
-  const ff = Math.min(1, Math.max(0, expressions.viseme_FF ?? 0));
-  const ss = Math.min(1, Math.max(0, expressions.viseme_SS ?? 0));
-  const ch = Math.min(1, Math.max(0, expressions.viseme_CH ?? 0));
-  const kk = Math.min(1, Math.max(0, expressions.viseme_kk ?? 0));
-  const dd = Math.min(1, Math.max(0, expressions.viseme_DD ?? 0));
-  const nn = Math.min(1, Math.max(0, expressions.viseme_nn ?? 0));
-  const rr = Math.min(1, Math.max(0, expressions.viseme_RR ?? 0));
-  const sil = Math.min(1, Math.max(0, expressions.viseme_sil ?? 0));
+  const isPaused = expressions.isSpeechPaused ?? (expressions.viseme_sil === 1 && expressions.mouthOpen <= 0.02);
+  const speechVol = Math.max(0, Math.min(1, expressions.speechVolume ?? 0));
+
+  // If currently paused in audio or text, clamp all vowel/consonant visemes to zero
+  const aa = isPaused ? 0 : Math.min(1, Math.max(0, expressions.viseme_aa ?? 0));
+  const pp = isPaused ? 0 : Math.min(1, Math.max(0, expressions.viseme_PP ?? 0));
+  const u  = isPaused ? 0 : Math.min(1, Math.max(0, expressions.viseme_U ?? 0));
+  const o  = isPaused ? 0 : Math.min(1, Math.max(0, expressions.viseme_O ?? 0));
+  const e  = isPaused ? 0 : Math.min(1, Math.max(0, expressions.viseme_E ?? 0));
+  const i  = isPaused ? 0 : Math.min(1, Math.max(0, expressions.viseme_I ?? 0));
+  const ff = isPaused ? 0 : Math.min(1, Math.max(0, expressions.viseme_FF ?? 0));
+  const ss = isPaused ? 0 : Math.min(1, Math.max(0, expressions.viseme_SS ?? 0));
+  const ch = isPaused ? 0 : Math.min(1, Math.max(0, expressions.viseme_CH ?? 0));
+  const kk = isPaused ? 0 : Math.min(1, Math.max(0, expressions.viseme_kk ?? 0));
+  const dd = isPaused ? 0 : Math.min(1, Math.max(0, expressions.viseme_DD ?? 0));
+  const nn = isPaused ? 0 : Math.min(1, Math.max(0, expressions.viseme_nn ?? 0));
+  const rr = isPaused ? 0 : Math.min(1, Math.max(0, expressions.viseme_RR ?? 0));
+  const sil = isPaused ? 1.0 : Math.min(1, Math.max(0, expressions.viseme_sil ?? 0));
+
+  const effectiveMouthOpen = isPaused ? 0 : expressions.mouthOpen;
+  const effectiveJawOpen = isPaused ? 0 : expressions.jawOpen;
+
+  // Subtle, calm eyebrow lift during active speech
+  const speechBrowLift = !isPaused && speechVol > 0.05 ? Math.max(0, Math.sin(time * 1.5)) * 0.06 : 0;
+  const effectiveBrowUp = Math.min(1.0, (expressions.browInnerUp ?? 0) + speechBrowLift);
+
+  // Slow, smooth organic muscle interpolation (graceful, calm, and natural lip transitions)
+  const lerpSpeed = isPaused ? 0.38 : 0.18;
 
   rig.meshesWithMorphs.forEach((mesh) => {
     const dict = mesh.morphTargetDictionary;
     const infl = mesh.morphTargetInfluences;
     if (!dict || !infl) return;
 
-    const setTarget = (key: string, targetVal: number, lerpFactor: number = 0.75) => {
+    const setTarget = (key: string, targetVal: number, lFactor: number = lerpSpeed) => {
       if (dict[key] !== undefined) {
         const idx = dict[key];
-        infl[idx] = THREE.MathUtils.lerp(infl[idx] ?? 0, targetVal, lerpFactor);
+        infl[idx] = THREE.MathUtils.lerp(infl[idx] ?? 0, targetVal, lFactor);
       }
     };
 
@@ -234,7 +279,7 @@ export function applyMorphTargets(
     setTarget('mouthSmileRight', expressions.mouthSmile);
     setTarget('eyeBlinkLeft', expressions.eyeBlinkLeft);
     setTarget('eyeBlinkRight', expressions.eyeBlinkRight);
-    setTarget('browInnerUp', expressions.browInnerUp);
+    setTarget('browInnerUp', effectiveBrowUp);
 
     // VRoid facial expressions
     setTarget('Fcl_EYE_Close_L', expressions.eyeBlinkLeft);
@@ -250,13 +295,11 @@ export function applyMorphTargets(
     // --- "آ" (aa) ---
     if (hasVisemeAA) {
       setTarget('viseme_aa', aa);
-      // Suppress raw mouthOpen & jawOpen so they don't multiply with viseme_aa
-      setTarget('mouthOpen', expressions.mouthOpen > 0.05 ? expressions.mouthOpen : 0);
-      setTarget('jawOpen', expressions.jawOpen > 0.05 ? expressions.jawOpen : 0);
+      setTarget('mouthOpen', effectiveMouthOpen > 0.05 ? effectiveMouthOpen : 0);
+      setTarget('jawOpen', effectiveJawOpen > 0.05 ? effectiveJawOpen : 0);
     } else {
-      // Fallback for models without viseme_aa
-      setTarget('mouthOpen', Math.max(expressions.mouthOpen, aa * 0.85));
-      setTarget('jawOpen', Math.max(expressions.jawOpen, aa * 0.7));
+      setTarget('mouthOpen', Math.max(effectiveMouthOpen, aa * 0.85));
+      setTarget('jawOpen', Math.max(effectiveJawOpen, aa * 0.7));
     }
     setTarget('Fcl_MTH_A', aa);
 
@@ -265,12 +308,10 @@ export function applyMorphTargets(
       setTarget('viseme_PP', pp);
     }
     if (pp > 0.15) {
-      // Natural lip press for bilabials
       setTarget('mouthPressLeft', pp * 0.4);
       setTarget('mouthPressRight', pp * 0.4);
       setTarget('mouthRollUpper', pp * 0.15);
       setTarget('mouthRollLower', pp * 0.15);
-      // Firmly seal the opening morphs
       setTarget('mouthOpen', 0);
       setTarget('jawOpen', 0);
     } else {
@@ -283,11 +324,9 @@ export function applyMorphTargets(
     // --- "او" (U - Closed Rounded Pucker) ---
     if (hasVisemeU) {
       setTarget('viseme_U', u);
-      // Clear distorting shapes
       setTarget('mouthPucker', 0);
       setTarget('mouthFunnel', 0);
     } else {
-      // Fallback for models with only ARKit
       setTarget('mouthPucker', u);
     }
     setTarget('Fcl_MTH_U', u);

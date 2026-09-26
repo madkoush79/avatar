@@ -42,10 +42,11 @@ export class PersianSpeechSynthesizer {
     } = {},
     callbacks: {
       onVisemeUpdate: (
-        morphs: Record<string, number>,
+        morphs: Record<string, number | boolean>,
         activeViseme: OculusViseme,
         char: string,
-        word: string
+        word: string,
+        metrics?: { volume: number; isSilent: boolean; isSpeaking: boolean }
       ) => void;
       onStart?: () => void;
       onEnd?: () => void;
@@ -116,10 +117,16 @@ export class PersianSpeechSynthesizer {
         const gainNode = ctx.createGain();
         gainNode.gain.setValueAtTime(0.95, ctx.currentTime);
 
-        source.connect(gainNode);
+        // Real-time audio analyser for exact acoustic pause and volume tracking
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 256;
+        analyser.smoothingTimeConstant = 0.25;
+
+        source.connect(analyser);
+        analyser.connect(gainNode);
         gainNode.connect(ctx.destination);
 
-        this.activeNodes.push(source, gainNode);
+        this.activeNodes.push(source, analyser, gainNode);
 
         const actualAudioDuration = audioBuffer.duration / rate;
         const lipsync = LipsyncFa.generateLipSync(cleanText, rate, actualAudioDuration);
@@ -127,6 +134,9 @@ export class PersianSpeechSynthesizer {
         callbacks.onStart?.();
         const audioStartTime = performance.now() / 1000;
         source.start();
+
+        const timeData = new Uint8Array(analyser.frequencyBinCount);
+        let smoothVolume = 0.3;
 
         const renderLoop = () => {
           if (!this.isPlaying || stopped) return;
@@ -140,12 +150,46 @@ export class PersianSpeechSynthesizer {
             return;
           }
 
-          const sample = LipsyncFa.sampleVisemesAtTime(lipsync, elapsed, exaggeration);
+          // Compute real-time RMS amplitude for acoustic pause & volume detection
+          analyser.getByteTimeDomainData(timeData);
+          let sumSquares = 0;
+          for (let i = 0; i < timeData.length; i++) {
+            const norm = (timeData[i] - 128) / 128;
+            sumSquares += norm * norm;
+          }
+          const instantRms = Math.sqrt(sumSquares / timeData.length);
+          const instantVol = Math.min(1.0, instantRms * 5.8);
+          // Gentle, calm envelope follower (smooth attack, natural decay)
+          smoothVolume += (instantVol - smoothVolume) * (instantVol > smoothVolume ? 0.22 : 0.12);
+
+          // Audio silence threshold
+          const isAudioSilent = smoothVolume < 0.04;
+
+          const sample = LipsyncFa.sampleVisemesAtTime(
+            lipsync,
+            elapsed,
+            exaggeration,
+            smoothVolume,
+            isAudioSilent
+          );
+
+          // Attach speech metrics directly to morphs for zero-latency WebGL frame update
+          const morphsPayload: Record<string, number | boolean> = {
+            ...sample.morphs,
+            speechVolume: isAudioSilent ? 0 : smoothVolume,
+            isSpeechPaused: sample.isPaused || isAudioSilent,
+          };
+
           callbacks.onVisemeUpdate(
-            sample.morphs,
+            morphsPayload,
             sample.activeViseme,
             sample.activeChar,
-            sample.activeWord
+            sample.activeWord,
+            {
+              volume: isAudioSilent ? 0 : smoothVolume,
+              isSilent: sample.isPaused || isAudioSilent,
+              isSpeaking: true,
+            }
           );
 
           this.animFrameId = requestAnimationFrame(renderLoop);
@@ -201,12 +245,30 @@ export class PersianSpeechSynthesizer {
           return;
         }
 
-        const sample = LipsyncFa.sampleVisemesAtTime(lipsync, elapsed, exaggeration);
+        const sample = LipsyncFa.sampleVisemesAtTime(
+          lipsync,
+          elapsed,
+          exaggeration,
+          0.75,
+          false
+        );
+
+        const morphsPayload: Record<string, number | boolean> = {
+          ...sample.morphs,
+          speechVolume: sample.isPaused ? 0 : 0.75,
+          isSpeechPaused: sample.isPaused,
+        };
+
         callbacks.onVisemeUpdate(
-          sample.morphs,
+          morphsPayload,
           sample.activeViseme,
           sample.activeChar,
-          sample.activeWord
+          sample.activeWord,
+          {
+            volume: sample.isPaused ? 0 : 0.75,
+            isSilent: sample.isPaused,
+            isSpeaking: true,
+          }
         );
 
         this.animFrameId = requestAnimationFrame(renderLoop);

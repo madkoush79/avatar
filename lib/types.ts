@@ -90,4 +90,7 @@ export interface FacialExpression {
   viseme_nn?: number;
   viseme_RR?: number;
   viseme_sil?: number;
+  // Live speech & audio envelope properties
+  speechVolume?: number; // 0.0 to 1.0 real-time volume envelope
+  isSpeechPaused?: boolean; // true during sound pauses/silences
 }

@@ -242,9 +242,13 @@ export function SpeechStudio({
           setActivePhoneme({ char: '', word: '', viseme: 'sil' });
           resetVisemes();
         },
-        onVisemeUpdate: (morphs, activeViseme, char, word) => {
+        onVisemeUpdate: (morphs, activeViseme, char, word, metrics) => {
           setActivePhoneme({ char, word, viseme: activeViseme });
-          onUpdateVisemes(morphs as Partial<FacialExpression>);
+          onUpdateVisemes({
+            ...(morphs as Partial<FacialExpression>),
+            speechVolume: metrics?.volume ?? 0,
+            isSpeechPaused: metrics?.isSilent ?? (activeViseme === 'sil'),
+          });
         },
       }
     );
@@ -278,6 +282,8 @@ export function SpeechStudio({
       viseme_RR: 0,
       mouthOpen: 0,
       jawOpen: 0,
+      speechVolume: 0,
+      isSpeechPaused: true,
     });
   };
 
@@ -355,11 +361,13 @@ export function SpeechStudio({
           mouthOpen: openAmt * 0.9,
           jawOpen: openAmt * 0.8,
           viseme_PP: 0,
+          speechVolume: vol,
+          isSpeechPaused: false,
         });
         setActivePhoneme({ char: 'صدا', word: 'میکروفون زنده', viseme: 'aa' });
       } else {
         resetVisemes();
-        setActivePhoneme({ char: '', word: '', viseme: 'sil' });
+        setActivePhoneme({ char: 'مکث', word: 'سکوت صدا', viseme: 'sil' });
       }
     });
 

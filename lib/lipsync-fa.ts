@@ -111,22 +111,23 @@ const PERSIAN_CHAR_TO_VISEME: Record<string, OculusViseme> = {
 };
 
 // Relative duration for each viseme (in seconds at rate 1.0)
+// Adjusted for calmer, slower, natural phoneme articulation
 const VISEME_DURATIONS: Record<OculusViseme, number> = {
-  'aa': 0.15,
-  'O': 0.14,
-  'U': 0.14,
-  'E': 0.12,
-  'I': 0.12,
-  'PP': 0.09, // quick crisp closure
-  'FF': 0.10,
-  'DD': 0.08,
-  'kk': 0.09,
-  'CH': 0.11,
-  'SS': 0.11,
-  'nn': 0.08,
-  'RR': 0.08,
-  'TH': 0.09,
-  'sil': 0.08,
+  'aa': 0.22,
+  'O': 0.20,
+  'U': 0.20,
+  'E': 0.18,
+  'I': 0.18,
+  'PP': 0.15, // natural relaxed closure
+  'FF': 0.16,
+  'DD': 0.15,
+  'kk': 0.15,
+  'CH': 0.17,
+  'SS': 0.17,
+  'nn': 0.15,
+  'RR': 0.15,
+  'TH': 0.15,
+  'sil': 0.14,
 };
 
 // Morph weights (how much jaw and mouth opens) for each viseme
@@ -146,6 +147,21 @@ const VISEME_WEIGHTS: Record<OculusViseme, { mouthOpen: number; jawOpen: number;
   'RR': { mouthOpen: 0.35, jawOpen: 0.25, intensity: 0.75 },
   'TH': { mouthOpen: 0.25, jawOpen: 0.15, intensity: 0.75 },
   'sil': { mouthOpen: 0.0, jawOpen: 0.0, intensity: 0.0 },
+};
+
+export const PUNCTUATION_PAUSES: Record<string, number> = {
+  '.': 0.52,
+  '!': 0.52,
+  '؟': 0.58,
+  '?': 0.58,
+  '،': 0.32,
+  ',': 0.30,
+  '؛': 0.36,
+  ';': 0.36,
+  ':': 0.35,
+  '…': 0.65,
+  '...': 0.65,
+  '\n': 0.55,
 };
 
 export class LipsyncFa {
@@ -175,7 +191,8 @@ export class LipsyncFa {
 
   /**
    * Convert Persian text into timed sequence of Oculus LipSync visemes
-   * If targetDuration is specified, frames are precisely scaled to match audio duration
+   * Accurately parses punctuation marks as realistic acoustic pauses (مکث)
+   * If targetDuration is specified, frames are scaled to match actual audio duration
    */
   static generateLipSync(
     text: string,
@@ -183,26 +200,57 @@ export class LipsyncFa {
     targetDuration?: number
   ): PersianLipsyncResult {
     const cleaned = this.cleanText(text);
-    const words = cleaned.split(/\s+/).filter(Boolean);
+    // Tokenize into words and punctuation tokens
+    const rawTokens = cleaned.match(/([.!?،؟؛:…]+)|(\S+)/g) || [];
     const frames: VisemeFrame[] = [];
     const wordSpans: { word: string; startTime: number; endTime: number }[] = [];
 
-    let currentTime = 0.05; // tiny initial breath pause
+    let currentTime = 0.06; // natural initial breath pause
 
-    // Rate scaling: rate 0.5 means twice the duration (rateFactor = 2.0)
+    // Rate scaling: rate 0.5 means twice the duration
     const rateFactor = Math.max(0.4, Math.min(3.0, 1.0 / rate));
 
-    for (let wIdx = 0; wIdx < words.length; wIdx++) {
-      const word = words[wIdx];
-      const wordStart = currentTime;
+    for (let tIdx = 0; tIdx < rawTokens.length; tIdx++) {
+      const token = rawTokens[tIdx];
 
-      const chars = [...word];
+      // Check if token is punctuation pause (e.g. '.', '!', '؟', '،', etc.)
+      const isPunctOnly = /^[.!?،؟؛:…]+$/.test(token);
+      if (isPunctOnly) {
+        const punctChar = token[0];
+        const pauseBase = PUNCTUATION_PAUSES[token] || PUNCTUATION_PAUSES[punctChar] || 0.45;
+        const pauseDur = pauseBase * rateFactor;
+
+        frames.push({
+          char: token,
+          word: '(مکث)',
+          viseme: 'sil',
+          time: currentTime,
+          duration: pauseDur,
+          intensity: 0,
+          mouthOpen: 0,
+          jawOpen: 0,
+        });
+        currentTime += pauseDur;
+        continue;
+      }
+
+      // Check if word has trailing punctuation attached (e.g., "سلام!" or "استودیو،")
+      const trailingPunctMatch = token.match(/^(.*?)([.!?,،؟؛:…]+)$/);
+      let wordCore = token;
+      let trailingPunct = '';
+      if (trailingPunctMatch) {
+        wordCore = trailingPunctMatch[1];
+        trailingPunct = trailingPunctMatch[2];
+      }
+
+      const wordStart = currentTime;
+      const chars = [...wordCore];
+
       for (let cIdx = 0; cIdx < chars.length; cIdx++) {
         const char = chars[cIdx];
         let viseme = PERSIAN_CHAR_TO_VISEME[char];
 
         if (!viseme) {
-          // Fallback heuristic for unknown chars
           if (/[a-zA-Z]/.test(char)) {
             viseme = 'aa';
           } else {
@@ -216,13 +264,13 @@ export class LipsyncFa {
         if (char === 'ا' && cIdx < chars.length - 1 && chars[cIdx + 1] === 'و') {
           viseme = 'U';
           displayChar = 'او';
-          cIdx++; // consume 'و' so it doesn't get processed as 'O'
+          cIdx++; // consume 'و'
         } else if (char === 'ا' && cIdx < chars.length - 1 && chars[cIdx + 1] === 'ی') {
           viseme = 'I';
           displayChar = 'ای';
           cIdx++; // consume 'ی'
         } else if (char === 'و') {
-          // If 'و' is preceded by a consonant, in Persian it is usually vowel /u/ ("بو", "مو", "دو", "رو", "پوچ")
+          // If 'و' is preceded by a consonant, in Persian it is usually vowel /u/
           if (cIdx > 0 && !['ا', 'آ', 'ه', 'و', 'ی'].includes(chars[cIdx - 1])) {
             viseme = 'U';
           }
@@ -238,7 +286,7 @@ export class LipsyncFa {
         } else {
           frames.push({
             char: displayChar,
-            word,
+            word: wordCore,
             viseme,
             time: currentTime,
             duration: baseDur,
@@ -251,27 +299,44 @@ export class LipsyncFa {
       }
 
       wordSpans.push({
-        word,
+        word: wordCore,
         startTime: wordStart,
         endTime: currentTime,
       });
 
-      // Inter-word pause
-      const pauseDur = (wIdx === words.length - 1 ? 0.2 : 0.07) * rateFactor;
-      frames.push({
-        char: ' ',
-        word,
-        viseme: 'sil',
-        time: currentTime,
-        duration: pauseDur,
-        intensity: 0,
-        mouthOpen: 0,
-        jawOpen: 0,
-      });
-      currentTime += pauseDur;
+      // Trailing punctuation pause or normal inter-word pause
+      if (trailingPunct) {
+        const pauseBase = PUNCTUATION_PAUSES[trailingPunct] || PUNCTUATION_PAUSES[trailingPunct[0]] || 0.45;
+        const pauseDur = pauseBase * rateFactor;
+        frames.push({
+          char: trailingPunct,
+          word: '(مکث)',
+          viseme: 'sil',
+          time: currentTime,
+          duration: pauseDur,
+          intensity: 0,
+          mouthOpen: 0,
+          jawOpen: 0,
+        });
+        currentTime += pauseDur;
+      } else {
+        // Standard inter-word pause
+        const pauseDur = (tIdx === rawTokens.length - 1 ? 0.25 : 0.08) * rateFactor;
+        frames.push({
+          char: ' ',
+          word: wordCore,
+          viseme: 'sil',
+          time: currentTime,
+          duration: pauseDur,
+          intensity: 0,
+          mouthOpen: 0,
+          jawOpen: 0,
+        });
+        currentTime += pauseDur;
+      }
     }
 
-    // If an exact audio duration is requested, scale every frame and word boundary linearly
+    // If an exact audio duration is requested, scale frames proportionally
     if (targetDuration && targetDuration > 0 && currentTime > 0) {
       const scale = targetDuration / currentTime;
       frames.forEach((f) => {
@@ -293,30 +358,63 @@ export class LipsyncFa {
   }
 
   /**
-   * Sample active visemes at a given time point with cosine smoothing
+   * Sample active visemes at a given time point with cosine smoothing,
+   * live audio volume modulation, and strict silence/pause gating.
    */
   static sampleVisemesAtTime(
     lipsync: PersianLipsyncResult,
     elapsedSeconds: number,
-    exaggeration: number = 1.0
+    exaggeration: number = 1.0,
+    audioVolume?: number, // 0.0 to 1.0 live audio volume
+    isAudioSilent?: boolean // live sound pause flag
   ): {
     activeViseme: OculusViseme;
     activeChar: string;
     activeWord: string;
     morphs: Record<string, number>;
+    isPaused: boolean;
   } {
     const { frames } = lipsync;
+
+    // Silence template (lips completely closed, rest pose)
+    const zeroMorphs: Record<string, number> = {
+      viseme_sil: 1,
+      viseme_PP: 0,
+      viseme_FF: 0,
+      viseme_TH: 0,
+      viseme_DD: 0,
+      viseme_kk: 0,
+      viseme_CH: 0,
+      viseme_SS: 0,
+      viseme_nn: 0,
+      viseme_RR: 0,
+      viseme_aa: 0,
+      viseme_E: 0,
+      viseme_I: 0,
+      viseme_O: 0,
+      viseme_U: 0,
+      mouthOpen: 0,
+      jawOpen: 0,
+    };
+
+    // If audio is acoustically silent, firmly seal mouth in perfect synchronization with the audio pause
+    if (isAudioSilent) {
+      return {
+        activeViseme: 'sil',
+        activeChar: '(مکث)',
+        activeWord: '(مکث صدا)',
+        morphs: { ...zeroMorphs },
+        isPaused: true,
+      };
+    }
 
     if (frames.length === 0 || elapsedSeconds < 0 || elapsedSeconds > lipsync.totalDuration) {
       return {
         activeViseme: 'sil',
         activeChar: '',
         activeWord: '',
-        morphs: {
-          viseme_sil: 1,
-          mouthOpen: 0,
-          jawOpen: 0,
-        },
+        morphs: { ...zeroMorphs },
+        isPaused: true,
       };
     }
 
@@ -331,7 +429,8 @@ export class LipsyncFa {
           activeViseme: 'sil',
           activeChar: '',
           activeWord: '',
-          morphs: { viseme_sil: 1, mouthOpen: 0, jawOpen: 0 },
+          morphs: { ...zeroMorphs },
+          isPaused: true,
         };
       }
       currentFrameIndex = frames.length - 1;
@@ -340,11 +439,28 @@ export class LipsyncFa {
     const frame = frames[currentFrameIndex];
     const progress = (elapsedSeconds - frame.time) / frame.duration; // 0 to 1
 
-    // Cosine smoothing curve for natural organic mouth muscle movement (bell shape)
-    const bellShape = Math.sin(Math.max(0, Math.min(1, progress)) * Math.PI);
-    const weight = Math.min(1.0, bellShape * frame.intensity * exaggeration);
+    // If active frame is silence (pause between words, sentence break, punctuation)
+    if (frame.viseme === 'sil') {
+      return {
+        activeViseme: 'sil',
+        activeChar: frame.char === ' ' ? '' : frame.char,
+        activeWord: frame.word,
+        morphs: { ...zeroMorphs },
+        isPaused: true,
+      };
+    }
 
-    // Initialize all visemes to zero
+    // Non-silence frame: use a smooth sustained curve that keeps natural articulation across the syllable
+    // and gently cross-fades into adjacent phonemes instead of snapping up and down rapidly
+    const smoothCurve = 0.65 + 0.35 * Math.sin(Math.max(0.1, Math.min(0.9, progress)) * Math.PI);
+    let weight = Math.min(1.0, smoothCurve * frame.intensity * exaggeration);
+
+    // Audio volume modulation: scale mouth opening and viseme intensity gently with acoustic volume
+    if (audioVolume !== undefined) {
+      const volumeFactor = Math.min(1.15, 0.5 + Math.max(0, Math.min(1, audioVolume)) * 0.65);
+      weight *= volumeFactor;
+    }
+
     const morphs: Record<string, number> = {
       viseme_sil: 0,
       viseme_PP: 0,
@@ -365,35 +481,31 @@ export class LipsyncFa {
       jawOpen: 0,
     };
 
-    if (frame.viseme === 'sil') {
-      morphs.viseme_sil = 1;
+    const visemeKey = `viseme_${frame.viseme}`;
+    morphs[visemeKey] = weight;
+
+    // Sustain gentle natural mouth openness throughout speech words without jerky fluttering
+    morphs.mouthOpen = Math.max(0.28 * weight, frame.mouthOpen * weight);
+    morphs.jawOpen = Math.max(0.18 * weight, frame.jawOpen * weight);
+
+    // Special bilabial closure enforcement (ب, پ, م)
+    if (frame.viseme === 'PP') {
       morphs.mouthOpen = 0;
       morphs.jawOpen = 0;
-    } else {
-      const visemeKey = `viseme_${frame.viseme}`;
-      morphs[visemeKey] = weight;
-      morphs.mouthOpen = frame.mouthOpen * weight;
-      morphs.jawOpen = frame.jawOpen * weight;
-
-      // Special bilabial closure enforcement (ب, پ, م)
-      if (frame.viseme === 'PP') {
-        morphs.mouthOpen = 0;
-        morphs.jawOpen = 0;
-        morphs.viseme_PP = weight;
-      }
+      morphs.viseme_PP = weight;
     }
 
-    // Blend previous and next frame for seamless co-articulation
-    if (progress < 0.25 && currentFrameIndex > 0) {
+    // Wide, seamless co-articulation blending with adjacent non-silence phonemes for calm, slow transitions
+    if (progress < 0.45 && currentFrameIndex > 0) {
       const prev = frames[currentFrameIndex - 1];
       if (prev.viseme !== 'sil') {
-        const blend = (0.25 - progress) / 0.25 * 0.3 * exaggeration;
+        const blend = ((0.45 - progress) / 0.45) * 0.4 * exaggeration;
         morphs[`viseme_${prev.viseme}`] = Math.max(morphs[`viseme_${prev.viseme}`] || 0, blend);
       }
-    } else if (progress > 0.75 && currentFrameIndex < frames.length - 1) {
+    } else if (progress > 0.55 && currentFrameIndex < frames.length - 1) {
       const next = frames[currentFrameIndex + 1];
       if (next.viseme !== 'sil') {
-        const blend = (progress - 0.75) / 0.25 * 0.3 * exaggeration;
+        const blend = ((progress - 0.55) / 0.45) * 0.4 * exaggeration;
         morphs[`viseme_${next.viseme}`] = Math.max(morphs[`viseme_${next.viseme}`] || 0, blend);
       }
     }
@@ -403,6 +515,7 @@ export class LipsyncFa {
       activeChar: frame.char,
       activeWord: frame.word,
       morphs,
+      isPaused: false,
     };
   }
 }
