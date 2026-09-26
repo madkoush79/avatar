@@ -33,9 +33,12 @@ export class PersianSpeechSynthesizer {
     options: {
       rate?: number;
       pitch?: number;
+      rateStr?: string;
+      pitchStr?: string;
       exaggeration?: number;
       enableAudio?: boolean;
       useBrowserTTSIfAvailable?: boolean;
+      voice?: string;
     } = {},
     callbacks: {
       onVisemeUpdate: (
@@ -52,17 +55,19 @@ export class PersianSpeechSynthesizer {
     this.stop();
 
     const cleanText = text.trim();
+    const voice = options.voice || 'fa-IR-DilaraNeural';
     const rate = Math.max(0.4, options.rate ?? 1.0);
     const pitch = options.pitch ?? 1.0;
     const exaggeration = options.exaggeration ?? 1.0;
     const enableAudio = options.enableAudio ?? true;
+    const cacheKey = `${voice}_${cleanText}`;
 
     this.isPlaying = true;
     let stopped = false;
 
     const executePlayback = async () => {
       // 1. First priority: High-Fidelity Natural Neural Persian Voice (from /api/tts)
-      let audioBuffer = this.ttsCache.get(cleanText);
+      let audioBuffer = this.ttsCache.get(cacheKey);
 
       if (!audioBuffer && enableAudio && typeof window !== 'undefined') {
         try {
@@ -70,7 +75,12 @@ export class PersianSpeechSynthesizer {
           const res = await fetch('/api/tts', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: cleanText }),
+            body: JSON.stringify({
+              text: cleanText,
+              voice,
+              rate: options.rateStr,
+              pitch: options.pitchStr,
+            }),
           });
 
           if (res.ok) {
@@ -83,7 +93,7 @@ export class PersianSpeechSynthesizer {
                 bytes[i] = binary.charCodeAt(i);
               }
               audioBuffer = await ctx.decodeAudioData(bytes.buffer.slice(0));
-              this.ttsCache.set(cleanText, audioBuffer);
+              this.ttsCache.set(cacheKey, audioBuffer);
             }
           }
         } catch (err) {

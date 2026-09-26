@@ -5,6 +5,7 @@ import { FacialExpression } from '@/lib/types';
 import { LipsyncFa, OculusViseme } from '@/lib/lipsync-fa';
 import { persianSpeechSynth } from '@/lib/speech-synth-fa';
 import { MicAudioLipSync } from '@/lib/speech-sync';
+import { streamOllamaChat } from '@/lib/ollama-client';
 import { 
   Volume2, 
   VolumeX, 
@@ -17,7 +18,8 @@ import {
   Activity,
   Layers,
   Radio,
-  Play
+  Play,
+  Loader2
 } from 'lucide-react';
 
 interface SpeechStudioProps {
@@ -148,6 +150,8 @@ export function SpeechStudio({
   const [useVoiceAudio, setUseVoiceAudio] = useState<boolean>(true);
   const [micActive, setMicActive] = useState<boolean>(false);
   const [speechEngineMode, setSpeechEngineMode] = useState<'neural' | 'browser'>('neural');
+  const [selectedVoice, setSelectedVoice] = useState<string>('fa-IR-DilaraNeural');
+  const [isGeneratingAI, setIsGeneratingAI] = useState<boolean>(false);
 
   // Live Viseme Monitor state
   const [activePhoneme, setActivePhoneme] = useState<{
@@ -162,6 +166,35 @@ export function SpeechStudio({
 
   const micSyncRef = useRef<MicAudioLipSync | null>(null);
   const speechSessionRef = useRef<{ stop: () => void } | null>(null);
+
+  const handleGenerateAIText = async () => {
+    setIsGeneratingAI(true);
+    let generated = '';
+    const prompts = [
+      'یک جمله کوتاه، جذاب و شیوا به زبان فارسی برای تست لب‌خوانی و انیمیشن چهره کاراکتر سه بعدی بنویس (فقط یک یا دو جمله بدون توضیحات اضافه).',
+      'یک پیام خوش‌آمدگویی یا دیالوگ صمیمی فارسی بنویس (فقط متن جمله).',
+      'یک جمله روان فارسی با ترکیب حروف مختلف و واژه‌های صدادار برای تست دقیق لب‌خوانی بگو (فقط متن جمله).'
+    ];
+    const randomPrompt = prompts[Math.floor(Math.random() * prompts.length)];
+
+    await streamOllamaChat({
+      messages: [{ role: 'user', content: randomPrompt }],
+      systemPrompt: 'شما نادیا هستید. فقط متن کوتاه جمله فارسی درخواستی را بدون هیچ کلمه اضافی یا علامت نقل قول خروجی بده.',
+      temperature: 0.8,
+      onChunk: (chunk, acc) => {
+        generated = acc;
+        setCustomText(acc.replace(/^["'«]+|["'»]+$/g, '').trim());
+      },
+      onDone: (full) => {
+        setCustomText(full.replace(/^["'«]+|["'»]+$/g, '').trim());
+        setIsGeneratingAI(false);
+      },
+      onError: (err) => {
+        console.warn('Ollama generation error in SpeechStudio:', err);
+        setIsGeneratingAI(false);
+      }
+    });
+  };
 
   // Stop talking when unmounting
   useEffect(() => {
@@ -186,11 +219,17 @@ export function SpeechStudio({
 
     setIsSpeaking(true);
 
+    const computedRateStr = Math.abs(speechRate - 1.0) < 0.05 ? '-10%' : `${Math.round((speechRate - 1.0) * 100) >= 0 ? '+' : ''}${Math.round((speechRate - 1.0) * 100)}%`;
+    const computedPitchStr = Math.abs(speechPitch - 1.0) < 0.05 ? '+10Hz' : `${Math.round((speechPitch - 1.0) * 50) >= 0 ? '+' : ''}${Math.round((speechPitch - 1.0) * 50)}Hz`;
+
     const session = persianSpeechSynth.speak(
       textToSpeak,
       {
         rate: speechRate,
         pitch: speechPitch,
+        rateStr: computedRateStr,
+        pitchStr: computedPitchStr,
+        voice: selectedVoice,
         exaggeration: intensityExaggeration,
         enableAudio: useVoiceAudio,
         useBrowserTTSIfAvailable: true,
@@ -254,6 +293,9 @@ export function SpeechStudio({
         {
           rate: 0.5,
           pitch: speechPitch,
+          rateStr: '-10%',
+          pitchStr: '+10Hz',
+          voice: selectedVoice,
           exaggeration: intensityExaggeration,
           enableAudio: true,
           useBrowserTTSIfAvailable: false,
@@ -396,8 +438,17 @@ export function SpeechStudio({
         </div>
 
         <div className="flex items-center gap-1.5">
+          <select
+            value={selectedVoice}
+            onChange={(e) => setSelectedVoice(e.target.value)}
+            className="bg-slate-900 border border-slate-700 text-sky-300 text-[11px] rounded px-2 py-1 focus:outline-none focus:border-sky-500 cursor-pointer"
+            title="انتخاب گوینده هوش مصنوعی فارسی"
+          >
+            <option value="fa-IR-DilaraNeural">صوت زن (دیلارا)</option>
+            <option value="fa-IR-FaridNeural">صوت مرد (فرید)</option>
+          </select>
           <span className="text-[10px] px-1.5 py-0.5 rounded border border-slate-700/60 bg-slate-800/80 text-sky-400">
-            {speechEngineMode === 'neural' ? 'صوت استودیویی هوش مصنوعی' : 'صوت سیستم (مرورگر)'}
+            {speechEngineMode === 'neural' ? 'Neural TTS' : 'سیستم'}
           </span>
           <button
             onClick={() => setUseVoiceAudio(!useVoiceAudio)}
@@ -438,7 +489,22 @@ export function SpeechStudio({
 
       {/* Custom Text Area */}
       <div className="flex flex-col gap-1.5 mt-0.5">
-        <span className="text-[11px] text-slate-400 font-medium">متن فارسی دلخواه را تایپ کنید:</span>
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] text-slate-400 font-medium">متن فارسی دلخواه را تایپ کنید:</span>
+          <button
+            type="button"
+            onClick={handleGenerateAIText}
+            disabled={isGeneratingAI}
+            className="text-[11px] text-sky-400 hover:text-sky-300 font-medium flex items-center gap-1 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 px-2 py-0.5 rounded-lg transition-all"
+          >
+            {isGeneratingAI ? (
+              <Loader2 className="w-3 h-3 animate-spin text-sky-400" />
+            ) : (
+              <Sparkles className="w-3 h-3 text-amber-400" />
+            )}
+            <span>{isGeneratingAI ? 'در حال نگارش با نادیا...' : 'تولید متن با نادیا (Ollama)'}</span>
+          </button>
+        </div>
         <div className="flex gap-2">
           <input
             type="text"

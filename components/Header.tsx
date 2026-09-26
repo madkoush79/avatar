@@ -55,9 +55,13 @@ export function Header({
             <span className="text-[10px] font-mono bg-sky-500/10 text-sky-400 border border-sky-500/20 px-1.5 py-0.5 rounded">
               v1.7.0
             </span>
+            <span className="text-[10px] font-medium bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span>Nadia Ollama</span>
+            </span>
           </div>
           <p className="text-[11px] text-slate-400">
-            کاراکترهای mahdiyarKoushki/TalkingHead با ۱۰ فیگور اختصاصی
+            استودیو ۳ بعدی با هوش مصنوعی نادیا (Ollama) و ۱۰ فیگور اختصاصی
           </p>
         </div>
       </div>

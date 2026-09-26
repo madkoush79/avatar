@@ -2,5 +2,5 @@
   "name": "TalkingHead 3D Character & Figure Studio",
   "description": "Interactive 3D Character Studio based on mahdiyarKoushki/TalkingHead featuring all characters and 10 dynamic poses/figures with real-time lip-sync, gestures, and studio lighting.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": []
 }

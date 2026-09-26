@@ -6,6 +6,7 @@ import { Header } from '@/components/Header';
 import { CharacterSelector } from '@/components/CharacterSelector';
 import { FigureSelector } from '@/components/FigureSelector';
 import { SpeechStudio } from '@/components/SpeechStudio';
+import { NadiaAIChat } from '@/components/NadiaAIChat';
 import { ExpressionStudio } from '@/components/ExpressionStudio';
 import { EnvironmentStudio } from '@/components/EnvironmentStudio';
 import { FigureCardModal } from '@/components/FigureCardModal';
@@ -68,7 +69,7 @@ export default function TalkingHeadStudioPage() {
   const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
 
   // Active Tab in Sidebar
-  const [activeTab, setActiveTab] = useState<'figures' | 'characters' | 'speech' | 'expressions' | 'environment'>('figures');
+  const [activeTab, setActiveTab] = useState<'ai' | 'figures' | 'characters' | 'speech' | 'expressions' | 'environment'>('ai');
 
   // Modals
   const [galleryOpen, setGalleryOpen] = useState<boolean>(false);
@@ -231,6 +232,18 @@ export default function TalkingHeadStudioPage() {
           {/* Studio Tab Navigation */}
           <nav className="flex items-center bg-slate-900/80 border-b border-slate-800/80 p-1.5 gap-1 overflow-x-auto shrink-0">
             <button
+              onClick={() => setActiveTab('ai')}
+              className={`flex-1 py-2 px-2.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 whitespace-nowrap transition-all ${
+                activeTab === 'ai'
+                  ? 'bg-gradient-to-r from-sky-500/20 to-emerald-500/20 text-sky-300 shadow-sm border border-sky-500/30'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <span>هوش مصنوعی (نادیا)</span>
+            </button>
+
+            <button
               onClick={() => setActiveTab('figures')}
               className={`flex-1 py-2 px-2.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 whitespace-nowrap transition-all ${
                 activeTab === 'figures'
@@ -293,6 +306,15 @@ export default function TalkingHeadStudioPage() {
 
           {/* Tab Content Panels */}
           <div className="p-4 overflow-y-auto flex-1 flex flex-col gap-4">
+            {activeTab === 'ai' && (
+              <NadiaAIChat
+                onUpdateVisemes={handleUpdateExpressions}
+                isSpeaking={isSpeaking}
+                setIsSpeaking={setIsSpeaking}
+                characterName={character.nameFa || character.name}
+              />
+            )}
+
             {activeTab === 'figures' && (
               <FigureSelector
                 selectedFigure={figure}
