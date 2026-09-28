@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { synthesizeGeminiTTS } from '@/lib/gemini-tts';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,16 +10,43 @@ const DEFAULT_PERSION_PITCH = '+10Hz';
 
 export async function POST(req: NextRequest) {
   try {
-    const { text, voice, rate, pitch } = await req.json();
+    const { text, voice, rate, pitch, model } = await req.json();
 
     if (!text || typeof text !== 'string' || !text.trim()) {
       return NextResponse.json({ error: 'متن برای خواندن الزامی است' }, { status: 400 });
     }
 
     const clean = text.trim();
+
+    // 1. Primary Engine: High-Fidelity Gemini TTS via GapGPT API
+    try {
+      const geminiResult = await synthesizeGeminiTTS(clean, {
+        voiceName: voice,
+        model: model,
+      });
+
+      if (geminiResult && geminiResult.audioBase64) {
+        return NextResponse.json({
+          audioBase64: geminiResult.audioBase64,
+          mimeType: geminiResult.mimeType || 'audio/wav',
+          provider: geminiResult.provider,
+          voice: geminiResult.voice,
+          model: geminiResult.model,
+          rate,
+          pitch,
+        });
+      }
+    } catch (geminiErr) {
+      console.warn(
+        'Gemini TTS via GapGPT error, falling back to secondary TTS:',
+        geminiErr instanceof Error ? geminiErr.message : geminiErr
+      );
+    }
+
+    // 2. Secondary Engine: Edge-TTS Persian fallback
     const voiceName = voice || DEFAULT_PERSION_VOICE;
 
-    // Format rate: Edge-TTS backend requires signed percentage like '-10%', '+0%', '+15%'
+    // Format rate
     let rateStr = DEFAULT_PERSION_RATE;
     if (typeof rate === 'string' && rate.trim()) {
       let r = rate.trim();
@@ -30,7 +58,7 @@ export async function POST(req: NextRequest) {
       rateStr = pct >= 0 ? `+${pct}%` : `${pct}%`;
     }
 
-    // Format pitch: Edge-TTS backend requires signed Hz like '+10Hz', '+0Hz', '-5Hz'
+    // Format pitch
     let pitchStr = DEFAULT_PERSION_PITCH;
     if (typeof pitch === 'string' && pitch.trim()) {
       let p = pitch.trim();
@@ -43,7 +71,7 @@ export async function POST(req: NextRequest) {
     }
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
+    const timeout = setTimeout(() => controller.abort(), 12000);
 
     const response = await fetch(PERSION_TTS_URL, {
       method: 'POST',
@@ -51,17 +79,6 @@ export async function POST(req: NextRequest) {
         'accept': '*/*',
         'accept-language': 'en-US,en;q=0.9,fa;q=0.8',
         'content-type': 'application/json',
-        'dnt': '1',
-        'origin': 'https://persion-tts.vercel.app',
-        'priority': 'u=1, i',
-        'referer': 'https://persion-tts.vercel.app/static/index.html',
-        'sec-ch-ua': '"Chromium";v="154", "Google Chrome";v="154", "Not A(Brand";v="99"',
-        'sec-ch-ua-mobile': '?0',
-        'sec-ch-ua-platform': '"Windows"',
-        'sec-fetch-dest': 'empty',
-        'sec-fetch-mode': 'cors',
-        'sec-fetch-site': 'same-origin',
-        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36',
       },
       body: JSON.stringify({
         text: clean,
@@ -73,33 +90,32 @@ export async function POST(req: NextRequest) {
     });
     clearTimeout(timeout);
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.warn(`Persion TTS failed (${response.status}):`, errText);
-      return NextResponse.json(
-        {
-          fallback: true,
-          error: `خطای سرور تبدیل گفتار (${response.status})`,
-        },
-        { status: 200 }
-      );
+    if (response.ok) {
+      const arrayBuffer = await response.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      const audioBase64 = buffer.toString('base64');
+      const mimeType = response.headers.get('content-type') || 'audio/mpeg';
+
+      return NextResponse.json({
+        audioBase64,
+        mimeType,
+        provider: 'edge-tts-fallback',
+        voice: voiceName,
+        rate: rateStr,
+        pitch: pitchStr,
+      });
     }
 
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    const audioBase64 = buffer.toString('base64');
-    const mimeType = response.headers.get('content-type') || 'audio/mpeg';
-
-    return NextResponse.json({
-      audioBase64,
-      mimeType,
-      voice: voiceName,
-      rate: rateStr,
-      pitch: pitchStr,
-    });
+    return NextResponse.json(
+      {
+        fallback: true,
+        error: `خطای سرور پشتیبان (${response.status})`,
+      },
+      { status: 200 }
+    );
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : String(err);
-    console.warn('Persion TTS request error, falling back:', errorMsg);
+    console.warn('TTS request error, falling back:', errorMsg);
     return NextResponse.json(
       {
         fallback: true,
@@ -109,4 +125,3 @@ export async function POST(req: NextRequest) {
     );
   }
 }
-

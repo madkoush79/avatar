@@ -150,7 +150,7 @@ export function SpeechStudio({
   const [useVoiceAudio, setUseVoiceAudio] = useState<boolean>(true);
   const [micActive, setMicActive] = useState<boolean>(false);
   const [speechEngineMode, setSpeechEngineMode] = useState<'neural' | 'browser'>('neural');
-  const [selectedVoice, setSelectedVoice] = useState<string>('fa-IR-DilaraNeural');
+  const [selectedVoice, setSelectedVoice] = useState<string>('Kore');
   const [isGeneratingAI, setIsGeneratingAI] = useState<boolean>(false);
 
   // Live Viseme Monitor state
@@ -452,8 +452,12 @@ export function SpeechStudio({
             className="bg-slate-900 border border-slate-700 text-sky-300 text-[11px] rounded px-2 py-1 focus:outline-none focus:border-sky-500 cursor-pointer"
             title="انتخاب گوینده هوش مصنوعی فارسی"
           >
-            <option value="fa-IR-DilaraNeural">صوت زن (دیلارا)</option>
-            <option value="fa-IR-FaridNeural">صوت مرد (فرید)</option>
+            <option value="Kore">جمینای Kore (زن/پیش‌فرض)</option>
+            <option value="Puck">جمینای Puck (مردانه)</option>
+            <option value="Fenrir">جمینای Fenrir (بم)</option>
+            <option value="Charon">جمینای Charon (آرام)</option>
+            <option value="fa-IR-DilaraNeural">صوت زن دیلارا (Edge)</option>
+            <option value="fa-IR-FaridNeural">صوت مرد فرید (Edge)</option>
           </select>
           <span className="text-[10px] px-1.5 py-0.5 rounded border border-slate-700/60 bg-slate-800/80 text-sky-400">
             {speechEngineMode === 'neural' ? 'Neural TTS' : 'سیستم'}

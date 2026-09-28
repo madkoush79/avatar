@@ -56,7 +56,7 @@ export class PersianSpeechSynthesizer {
     this.stop();
 
     const cleanText = text.trim();
-    const voice = options.voice || 'fa-IR-DilaraNeural';
+    const voice = options.voice || 'Kore';
     const rate = Math.max(0.4, options.rate ?? 1.0);
     const pitch = options.pitch ?? 1.0;
     const exaggeration = options.exaggeration ?? 1.0;

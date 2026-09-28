@@ -208,7 +208,7 @@ export function NadiaAIChat({
     const session = persianSpeechSynth.speak(
       cleanSpeechText,
       {
-        voice: 'fa-IR-DilaraNeural',
+        voice: 'Kore',
         rateStr: '-10%',
         pitchStr: '+10Hz',
         rate: 1.0,

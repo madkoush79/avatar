@@ -50,18 +50,18 @@ export function Header({
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-sm font-bold text-white tracking-tight">
-              TalkingHead 3D Studio
+              TalkingHead 3D · AI English Teacher
             </h1>
             <span className="text-[10px] font-mono bg-sky-500/10 text-sky-400 border border-sky-500/20 px-1.5 py-0.5 rounded">
-              v1.7.0
+              v2.0 Live
             </span>
             <span className="text-[10px] font-medium bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span>Nadia Ollama</span>
+              <span>ChatGPT Live Voice</span>
             </span>
           </div>
           <p className="text-[11px] text-slate-400">
-            استودیو ۳ بعدی با هوش مصنوعی نادیا (Ollama) و ۱۰ فیگور اختصاصی
+            کلاس زنده مکالمه زبان انگلیسی با آواتار ۳ بعدی و صدای اختصاصی ChatGPT
           </p>
         </div>
       </div>

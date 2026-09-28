@@ -101,13 +101,43 @@ const PERSIAN_CHAR_TO_VISEME: Record<string, OculusViseme> = {
   ' ': 'sil',
   '‌': 'sil', // Half-space (ZWNJ)
   '،': 'sil',
+  ',': 'sil',
   '.': 'sil',
   '!': 'sil',
   '؟': 'sil',
   '?': 'sil',
   ':': 'sil',
   '؛': 'sil',
+  ';': 'sil',
   '-': 'sil',
+
+  // English letters support for bilingual English Teacher
+  'a': 'aa', 'A': 'aa',
+  'b': 'PP', 'B': 'PP',
+  'c': 'kk', 'C': 'kk',
+  'd': 'DD', 'D': 'DD',
+  'e': 'E',  'E': 'E',
+  'f': 'FF', 'F': 'FF',
+  'g': 'kk', 'G': 'kk',
+  'h': 'aa', 'H': 'aa',
+  'i': 'I',  'I': 'I',
+  'j': 'CH', 'J': 'CH',
+  'k': 'kk', 'K': 'kk',
+  'l': 'nn', 'L': 'nn',
+  'm': 'PP', 'M': 'PP',
+  'n': 'nn', 'N': 'nn',
+  'o': 'O',  'O': 'O',
+  'p': 'PP', 'P': 'PP',
+  'q': 'kk', 'Q': 'kk',
+  'r': 'RR', 'R': 'RR',
+  's': 'SS', 'S': 'SS',
+  't': 'DD', 'T': 'DD',
+  'u': 'U',  'U': 'U',
+  'v': 'FF', 'V': 'FF',
+  'w': 'U',  'W': 'U',
+  'x': 'SS', 'X': 'SS',
+  'y': 'I',  'Y': 'I',
+  'z': 'SS', 'Z': 'SS',
 };
 
 // Relative duration for each viseme (in seconds at rate 1.0)
@@ -248,14 +278,10 @@ export class LipsyncFa {
 
       for (let cIdx = 0; cIdx < chars.length; cIdx++) {
         const char = chars[cIdx];
-        let viseme = PERSIAN_CHAR_TO_VISEME[char];
+        let viseme = PERSIAN_CHAR_TO_VISEME[char] || PERSIAN_CHAR_TO_VISEME[char.toLowerCase()];
 
         if (!viseme) {
-          if (/[a-zA-Z]/.test(char)) {
-            viseme = 'aa';
-          } else {
-            continue;
-          }
+          continue;
         }
 
         let displayChar = char;

@@ -6,7 +6,7 @@ import { Header } from '@/components/Header';
 import { CharacterSelector } from '@/components/CharacterSelector';
 import { FigureSelector } from '@/components/FigureSelector';
 import { SpeechStudio } from '@/components/SpeechStudio';
-import { NadiaAIChat } from '@/components/NadiaAIChat';
+import { LiveEnglishTeacher } from '@/components/LiveEnglishTeacher';
 import { ExpressionStudio } from '@/components/ExpressionStudio';
 import { EnvironmentStudio } from '@/components/EnvironmentStudio';
 import { FigureCardModal } from '@/components/FigureCardModal';
@@ -33,7 +33,9 @@ import {
   FlipHorizontal,
   ChevronLeft,
   ChevronRight,
-  Info
+  Info,
+  GraduationCap,
+  Radio
 } from 'lucide-react';
 
 export default function TalkingHeadStudioPage() {
@@ -69,7 +71,7 @@ export default function TalkingHeadStudioPage() {
   const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
 
   // Active Tab in Sidebar
-  const [activeTab, setActiveTab] = useState<'ai' | 'figures' | 'characters' | 'speech' | 'expressions' | 'environment'>('ai');
+  const [activeTab, setActiveTab] = useState<'live' | 'figures' | 'characters' | 'speech' | 'expressions' | 'environment'>('live');
 
   // Modals
   const [galleryOpen, setGalleryOpen] = useState<boolean>(false);
@@ -232,15 +234,15 @@ export default function TalkingHeadStudioPage() {
           {/* Studio Tab Navigation */}
           <nav className="flex items-center bg-slate-900/80 border-b border-slate-800/80 p-1.5 gap-1 overflow-x-auto shrink-0">
             <button
-              onClick={() => setActiveTab('ai')}
+              onClick={() => setActiveTab('live')}
               className={`flex-1 py-2 px-2.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 whitespace-nowrap transition-all ${
-                activeTab === 'ai'
-                  ? 'bg-gradient-to-r from-sky-500/20 to-emerald-500/20 text-sky-300 shadow-sm border border-sky-500/30'
+                activeTab === 'live'
+                  ? 'bg-gradient-to-r from-emerald-500/20 via-teal-500/20 to-sky-500/20 text-emerald-300 shadow-sm border border-emerald-500/40'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
               }`}
             >
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              <span>هوش مصنوعی (نادیا)</span>
+              <GraduationCap className="w-4 h-4 text-emerald-400" />
+              <span>معلم لایو (Live)</span>
             </button>
 
             <button
@@ -306,8 +308,8 @@ export default function TalkingHeadStudioPage() {
 
           {/* Tab Content Panels */}
           <div className="p-4 overflow-y-auto flex-1 flex flex-col gap-4">
-            {activeTab === 'ai' && (
-              <NadiaAIChat
+            {activeTab === 'live' && (
+              <LiveEnglishTeacher
                 onUpdateVisemes={handleUpdateExpressions}
                 isSpeaking={isSpeaking}
                 setIsSpeaking={setIsSpeaking}

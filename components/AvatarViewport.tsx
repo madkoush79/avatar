@@ -654,8 +654,8 @@ export const AvatarViewport = forwardRef<AvatarViewportHandle, AvatarViewportPro
           <Volume2 className={`w-4 h-4 ${expressions.isSpeechPaused ? '' : 'animate-bounce'}`} />
           <span>
             {expressions.isSpeechPaused
-              ? 'مکث صدا (هماهنگ با استراحت لب و حالت صحبت)'
-              : 'در حال گفتار و حرکات ریتمیک زنده'}
+              ? 'مکث طبیعی صدا (Natural Pause)'
+              : 'معلم در حال گفتار انگلیسی و لب‌خوانی زنده'}
           </span>
         </div>
       )}
